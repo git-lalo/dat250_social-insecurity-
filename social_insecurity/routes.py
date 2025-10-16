@@ -8,9 +8,44 @@ from pathlib import Path
 
 from flask import current_app as app
 from flask import flash, redirect, render_template, send_from_directory, url_for
+from flask_login import LoginManager, UserMixin, current_user, login_required, login_user, logout_user
 
 from social_insecurity import sqlite
 from social_insecurity.forms import CommentsForm, FriendsForm, IndexForm, PostForm, ProfileForm
+
+login_manager = LoginManager(app)
+login_manager.login_view= "index"
+
+class User(UserMixin):
+    def __init__(self, id, username, password, first_name, last_name):
+        self.id = id
+        self.username = username
+        self.password = password
+        self.first_name = first_name
+        self.last_name = last_name
+
+@app.route("/logout")
+@login_required
+def logout():
+    logout_user()
+    flash("Du er nå logget ut.", "info")
+    return redirect(url_for("index"))
+
+
+@login_manager.user_loader
+def load_user(user_id):
+    query = f"SELECT * FROM Users WHERE id = {user_id};"
+    user = sqlite.query(query, one=True)
+    if user:
+        return User(
+            user["id"],
+            user["username"],     # ← manglet denne
+            user["password"],
+            user["first_name"],
+            user["last_name"],
+        )
+    return None
+
 
 
 @app.route("/", methods=["GET", "POST"])
@@ -39,8 +74,23 @@ def index():
             flash("Sorry, this user does not exist!", category="warning")
         elif user["password"] != login_form.password.data:
             flash("Sorry, wrong password!", category="warning")
+        #elif user["password"] == login_form.password.data: gammel kode
+        #    return redirect(url_for("stream", username=login_form.username.data))
         elif user["password"] == login_form.password.data:
+            # lag flasklogin object
+            user_obj = User(
+                user["id"],
+                user["username"],
+                user["password"],
+                user["first_name"],
+                user["last_name"],
+            )
+            # Logg inn brukeren (oppretter session-cookie)
+            login_user(user_obj)
+
+            #gå til logget inn side
             return redirect(url_for("stream", username=login_form.username.data))
+
 
     elif register_form.is_submitted() and register_form.submit.data:
         insert_user = f"""
@@ -55,6 +105,7 @@ def index():
 
 
 @app.route("/stream/<string:username>", methods=["GET", "POST"])
+@login_required
 def stream(username: str):
     """Provides the stream page for the application.
 
@@ -91,8 +142,8 @@ def stream(username: str):
     posts = sqlite.query(get_posts)
     return render_template("stream.html.j2", title="Stream", username=username, form=post_form, posts=posts)
 
-
 @app.route("/comments/<string:username>/<int:post_id>", methods=["GET", "POST"])
+@login_required
 def comments(username: str, post_id: int):
     """Provides the comments page for the application.
 
@@ -132,8 +183,8 @@ def comments(username: str, post_id: int):
         "comments.html.j2", title="Comments", username=username, form=comments_form, post=post, comments=comments
     )
 
-
 @app.route("/friends/<string:username>", methods=["GET", "POST"])
+@login_required
 def friends(username: str):
     """Provides the friends page for the application.
 
@@ -185,8 +236,8 @@ def friends(username: str):
     friends = sqlite.query(get_friends)
     return render_template("friends.html.j2", title="Friends", username=username, friends=friends, form=friends_form)
 
-
 @app.route("/profile/<string:username>", methods=["GET", "POST"])
+@login_required
 def profile(username: str):
     """Provides the profile page for the application.
 
@@ -215,8 +266,8 @@ def profile(username: str):
 
     return render_template("profile.html.j2", title="Profile", username=username, user=user, form=profile_form)
 
-
 @app.route("/uploads/<string:filename>")
+@login_required
 def uploads(filename):
     """Provides an endpoint for serving uploaded files."""
     return send_from_directory(Path(app.instance_path) / app.config["UPLOADS_FOLDER_PATH"], filename)
