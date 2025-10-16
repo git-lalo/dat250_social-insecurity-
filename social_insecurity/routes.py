@@ -5,6 +5,7 @@ It also contains the SQL queries used for communicating with the database.
 """
 
 from pathlib import Path
+from functools import wraps
 
 from flask import current_app as app
 from flask import flash, redirect, render_template, send_from_directory, url_for
@@ -39,12 +40,23 @@ def load_user(user_id):
     if user:
         return User(
             user["id"],
-            user["username"],     # ← manglet denne
+            user["username"],  
             user["password"],
             user["first_name"],
             user["last_name"],
         )
     return None
+
+def check_username(f): #sjekk om brukernavn som blir accesset i de ulike routesene faktisk er brukernavn som matcher med User klassen som er innlogget
+    @wraps(f)
+    def check_username_func(username, *args, **kwargs): ##args og kwars brukes for å ta imot tilfeldige variabler, evt id, brukernavn, passord osv
+        if current_user.username != username:
+            flash("You do not have the access and have been redirected")
+            return redirect(url_for("stream", username = current_user.username))
+        return f(username, *args, **kwargs) #hvis ok kjør original funksjon f
+    return check_username_func #returner
+
+
 
 
 
@@ -106,6 +118,7 @@ def index():
 
 @app.route("/stream/<string:username>", methods=["GET", "POST"])
 @login_required
+@check_username
 def stream(username: str):
     """Provides the stream page for the application.
 
@@ -144,6 +157,7 @@ def stream(username: str):
 
 @app.route("/comments/<string:username>/<int:post_id>", methods=["GET", "POST"])
 @login_required
+@check_username
 def comments(username: str, post_id: int):
     """Provides the comments page for the application.
 
@@ -185,6 +199,7 @@ def comments(username: str, post_id: int):
 
 @app.route("/friends/<string:username>", methods=["GET", "POST"])
 @login_required
+@check_username
 def friends(username: str):
     """Provides the friends page for the application.
 
@@ -238,6 +253,7 @@ def friends(username: str):
 
 @app.route("/profile/<string:username>", methods=["GET", "POST"])
 @login_required
+@check_username
 def profile(username: str):
     """Provides the profile page for the application.
 
@@ -268,6 +284,7 @@ def profile(username: str):
 
 @app.route("/uploads/<string:filename>")
 @login_required
+@check_username
 def uploads(filename):
     """Provides an endpoint for serving uploaded files."""
     return send_from_directory(Path(app.instance_path) / app.config["UPLOADS_FOLDER_PATH"], filename)
