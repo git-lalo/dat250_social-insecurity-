@@ -35,9 +35,7 @@ def logout():
 
 @login_manager.user_loader
 def load_user(user_id):
-    #query = f"SELECT * FROM Users WHERE id = {user_id};"
     query = "SELECT * FROM Users WHERE id = ?;"
-    #user = sqlite.query(query, one=True)
     user = sqlite.query(query, user_id, one=True)
     if user:
         return User(
